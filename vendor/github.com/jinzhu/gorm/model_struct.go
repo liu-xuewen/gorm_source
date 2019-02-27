@@ -133,8 +133,9 @@ func getForeignField(column string, fields []*StructField) *StructField {
 	return nil
 }
 
-// GetModelStruct get value's model struct, relationships based on struct and tag definition
+// GetModelStruct get value's model struct, relationships based on struct and tag definition 解析原有的model. scope中的Value.
 func (scope *Scope) GetModelStruct() *ModelStruct {
+	//debug.PrintStack()
 	var modelStruct ModelStruct
 	// Scope value can't be nil
 	if scope.Value == nil {
@@ -142,6 +143,7 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 	}
 
 	reflectType := reflect.ValueOf(scope.Value).Type()
+	//slice的元素或者指针的元素都一定要是struct.因为gorm就是为了解析到struct.
 	for reflectType.Kind() == reflect.Slice || reflectType.Kind() == reflect.Ptr {
 		reflectType = reflectType.Elem()
 	}
@@ -158,7 +160,7 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 
 	modelStruct.ModelType = reflectType
 
-	// Get all fields
+	// Get all fields 获取底层struct中所有的字段
 	for i := 0; i < reflectType.NumField(); i++ {
 		if fieldStruct := reflectType.Field(i); ast.IsExported(fieldStruct.Name) {
 			field := &StructField{
@@ -186,6 +188,7 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 					field.HasDefaultValue = true
 				}
 
+				//获取字段类型
 				indirectType := fieldStruct.Type
 				for indirectType.Kind() == reflect.Ptr {
 					indirectType = indirectType.Elem()
@@ -236,7 +239,7 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 					}
 					continue
 				} else {
-					// build relationships
+					// build relationships //如果是正常的类型.
 					switch indirectType.Kind() {
 					case reflect.Slice:
 						defer func(field *StructField) {
@@ -584,6 +587,7 @@ func (scope *Scope) GetModelStruct() *ModelStruct {
 			}
 
 			// Even it is ignored, also possible to decode db value into the field
+			//如果,,没有设置专门的列名,那么列名就用对应的下划线列名
 			if value, ok := field.TagSettings["COLUMN"]; ok {
 				field.DBName = value
 			} else {

@@ -7,7 +7,7 @@ import (
 	"reflect"
 )
 
-// Field model field definition
+// Field model field definition struct的一个字段.基本信息及值.
 type Field struct {
 	*StructField
 	IsBlank bool

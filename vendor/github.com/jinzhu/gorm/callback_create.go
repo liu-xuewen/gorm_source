@@ -7,6 +7,7 @@ import (
 
 // Define callbacks for creating
 func init() {
+
 	DefaultCallback.Create().Register("gorm:begin_transaction", beginTransactionCallback)
 	DefaultCallback.Create().Register("gorm:before_create", beforeCreateCallback)
 	DefaultCallback.Create().Register("gorm:save_before_associations", saveBeforeAssociationsCallback)
@@ -57,6 +58,7 @@ func createCallback(scope *Scope) {
 			blankColumnsWithDefaultValue []string
 		)
 
+		//只有插入需要获取Fields?
 		for _, field := range scope.Fields() {
 			if scope.changeableField(field) {
 				if field.IsNormal {
@@ -64,6 +66,7 @@ func createCallback(scope *Scope) {
 						blankColumnsWithDefaultValue = append(blankColumnsWithDefaultValue, scope.Quote(field.DBName))
 						scope.InstanceSet("gorm:blank_columns_with_default_value", blankColumnsWithDefaultValue)
 					} else if !field.IsPrimaryKey || !field.IsBlank {
+						//有默认值不会查这一列.
 						columns = append(columns, scope.Quote(field.DBName))
 						placeholders = append(placeholders, scope.AddToVars(field.Field.Interface()))
 					}
@@ -129,6 +132,7 @@ func createCallback(scope *Scope) {
 			}
 		} else {
 			if primaryField.Field.CanAddr() {
+				//CanAddr()可以动态给对象赋值. insert完之后,还给对象执行了一次查询
 				if err := scope.SQLDB().QueryRow(scope.SQL, scope.SQLVars...).Scan(primaryField.Field.Addr().Interface()); scope.Err(err) == nil {
 					primaryField.IsBlank = false
 					scope.db.RowsAffected = 1
@@ -155,6 +159,7 @@ func forceReloadAfterCreateCallback(scope *Scope) {
 
 // afterCreateCallback will invoke `AfterCreate`, `AfterSave` method after creating
 func afterCreateCallback(scope *Scope) {
+	//	debug.PrintStack()
 	if !scope.HasError() {
 		scope.CallMethod("AfterCreate")
 	}

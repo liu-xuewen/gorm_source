@@ -128,6 +128,7 @@ func Expr(expression string, args ...interface{}) *expr {
 	return &expr{expr: expression, args: args}
 }
 
+//主要是将指针类型转化为值类型
 func indirect(reflectValue reflect.Value) reflect.Value {
 	for reflectValue.Kind() == reflect.Ptr {
 		reflectValue = reflectValue.Elem()

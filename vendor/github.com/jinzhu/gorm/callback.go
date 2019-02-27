@@ -1,6 +1,8 @@
 package gorm
 
-import "log"
+import (
+	"log"
+)
 
 // DefaultCallback default callbacks defined by gorm
 var DefaultCallback = &Callback{}
@@ -97,7 +99,7 @@ func (cp *CallbackProcessor) Register(callbackName string, callback func(scope *
 			cp.before = "gorm:row_query"
 		}
 	}
-
+	//debug.PrintStack()
 	cp.name = callbackName
 	cp.processor = &callback
 	cp.parent.processors = append(cp.parent.processors, cp)

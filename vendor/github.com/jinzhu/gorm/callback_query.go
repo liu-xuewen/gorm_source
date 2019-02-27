@@ -26,7 +26,7 @@ func queryCallback(scope *Scope) {
 		resultType     reflect.Type
 		results        = scope.IndirectValue()
 	)
-
+//	fmt.Printf("results1: %v \n", results)
 	if orderBy, ok := scope.Get("gorm:order_by_primary_key"); ok {
 		if primaryField := scope.PrimaryField(); primaryField != nil {
 			scope.Search.Order(fmt.Sprintf("%v.%v %v", scope.QuotedTableName(), scope.Quote(primaryField.DBName), orderBy))
@@ -37,7 +37,10 @@ func queryCallback(scope *Scope) {
 		results = indirect(reflect.ValueOf(value))
 	}
 
+
+	//fmt.Println("results----",results)
 	if kind := results.Kind(); kind == reflect.Slice {
+		//反射初始化slice
 		isSlice = true
 		resultType = results.Type().Elem()
 		results.Set(reflect.MakeSlice(results.Type(), 0, 0))
@@ -53,6 +56,8 @@ func queryCallback(scope *Scope) {
 
 	scope.prepareQuerySQL()
 
+	//fmt.Println("--------scope.SQL:",scope.SQL)
+	//fmt.Println("-------- scope.SQLVars:", scope.SQLVars)
 	if !scope.HasError() {
 		scope.db.RowsAffected = 0
 		if str, ok := scope.Get("gorm:query_option"); ok {
@@ -63,17 +68,20 @@ func queryCallback(scope *Scope) {
 			defer rows.Close()
 
 			columns, _ := rows.Columns()
+
 			for rows.Next() {
 				scope.db.RowsAffected++
-
 				elem := results
 				if isSlice {
 					elem = reflect.New(resultType).Elem()
 				}
 
+				//scope.New(elem.Addr().Interface()).Fields() 是一个field的结构体的slice.一定含有默认值.
+				//将相应的数据库的列和相应的接收struct的字段.
 				scope.scan(rows, columns, scope.New(elem.Addr().Interface()).Fields())
 
 				if isSlice {
+					//result是一个结果指针,如果不是slice,就已经存进去了.
 					if isPtr {
 						results.Set(reflect.Append(results, elem.Addr()))
 					} else {

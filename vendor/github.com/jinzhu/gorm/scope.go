@@ -28,6 +28,9 @@ type Scope struct {
 
 // IndirectValue return scope's reflect value's indirect value
 func (scope *Scope) IndirectValue() reflect.Value {
+	//fmt.Println("-----scope.Value:", scope.Value)
+	//fmt.Println("reflect.ValueOf(scope.Value):", reflect.ValueOf(scope.Value))
+	//fmt.Printf("reflect.ValueOf(scope.Value): %v \n",reflect.ValueOf(scope.Value))
 	return indirect(reflect.ValueOf(scope.Value))
 }
 
@@ -102,7 +105,7 @@ func (scope *Scope) SkipLeft() {
 	scope.skipLeft = true
 }
 
-// Fields get value's fields
+// Fields get value's fields 没有的话取默认值.go对struct有初始化.
 func (scope *Scope) Fields() []*Field {
 	if scope.fields == nil {
 		var (
@@ -111,19 +114,25 @@ func (scope *Scope) Fields() []*Field {
 			isStruct           = indirectScopeValue.Kind() == reflect.Struct
 		)
 
+		//GetModelStruct()获取struct的字段,存入StructFields
 		for _, structField := range scope.GetModelStruct().StructFields {
+			//	fmt.Println("--------structField:", structField)
 			if isStruct {
 				fieldValue := indirectScopeValue
 				for _, name := range structField.Names {
 					if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
 						fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
 					}
+					//反射实现的获取字段对应值.
 					fieldValue = reflect.Indirect(fieldValue).FieldByName(name)
+					//fmt.Println("--------fieldValue:", fieldValue)
+					//fmt.Println("--------name:", name)
 				}
 				fields = append(fields, &Field{StructField: structField, Field: fieldValue, IsBlank: isBlank(fieldValue)})
 			} else {
 				fields = append(fields, &Field{StructField: structField, IsBlank: true})
 			}
+
 		}
 		scope.fields = &fields
 	}
@@ -137,7 +146,7 @@ func (scope *Scope) FieldByName(name string) (field *Field, ok bool) {
 		dbName           = ToDBName(name)
 		mostMatchedField *Field
 	)
-
+	//	debug.PrintStack()
 	for _, field := range scope.Fields() {
 		if field.Name == name || field.DBName == name {
 			return field, true
@@ -240,11 +249,16 @@ func (scope *Scope) SetColumn(column interface{}, value interface{}) error {
 
 // CallMethod call scope value's method, if it is a slice, will call its element's method one by one
 func (scope *Scope) CallMethod(methodName string) {
+	//debug.PrintStack()
 	if scope.Value == nil {
 		return
 	}
 
-	if indirectScopeValue := scope.IndirectValue(); indirectScopeValue.Kind() == reflect.Slice {
+	//fmt.Println("==-------------methodName:", methodName)
+	//fmt.Println("---scope:", scope)
+	indirectScopeValue := scope.IndirectValue()
+	//fmt.Println("---------------------indirectScopeValue.Kind():", indirectScopeValue.Kind())
+	if indirectScopeValue.Kind() == reflect.Slice {
 		for i := 0; i < indirectScopeValue.Len(); i++ {
 			scope.callMethod(methodName, indirectScopeValue.Index(i))
 		}
@@ -430,26 +444,35 @@ func (scope *Scope) CommitOrRollback() *Scope {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (scope *Scope) callMethod(methodName string, reflectValue reflect.Value) {
+	//fmt.Printf("......>>> methodName: %v \n", methodName)
 	// Only get address from non-pointer
 	if reflectValue.CanAddr() && reflectValue.Kind() != reflect.Ptr {
 		reflectValue = reflectValue.Addr()
 	}
-
+	//fmt.Printf("......>>> methodName: %v \n", methodName)
+	//获取它的方法名为methodName的方法值.将其还原为原方法类型. 然后执行.
 	if methodValue := reflectValue.MethodByName(methodName); methodValue.IsValid() {
 		switch method := methodValue.Interface().(type) {
 		case func():
+			//fmt.Printf("----------func(): %v methodName: %v \n", method, methodName)
 			method()
 		case func(*Scope):
+			//fmt.Printf("----------func(): %v methodName: %v \n", method, methodName)
 			method(scope)
 		case func(*DB):
+			//fmt.Printf("----------func(): %v methodName: %v \n", method, methodName)
 			newDB := scope.NewDB()
 			method(newDB)
 			scope.Err(newDB.Error)
 		case func() error:
+			fmt.Println("000000000000")
+			//fmt.Printf("----------func(): %v methodName: %v \n", method, methodName)
 			scope.Err(method())
 		case func(*Scope) error:
+			//fmt.Printf("----------func(): %v methodName: %v \n", method, methodName)
 			scope.Err(method(scope))
 		case func(*DB) error:
+			//fmt.Printf("----------func(): %v methodName: %v \n", method, methodName)
 			newDB := scope.NewDB()
 			scope.Err(method(newDB))
 			scope.Err(newDB.Error)
@@ -473,7 +496,9 @@ func (scope *Scope) quoteIfPossible(str string) string {
 	return str
 }
 
+//把一行数据scan到一个model中
 func (scope *Scope) scan(rows *sql.Rows, columns []string, fields []*Field) {
+	//debug.PrintStack()
 	var (
 		ignored            interface{}
 		values             = make([]interface{}, len(columns))
@@ -493,6 +518,7 @@ func (scope *Scope) scan(rows *sql.Rows, columns []string, fields []*Field) {
 		for fieldIndex, field := range selectFields {
 			if field.DBName == column {
 				if field.Field.Kind() == reflect.Ptr {
+					//存入原始数据值变量的地址
 					values[index] = field.Field.Addr().Interface()
 				} else {
 					reflectValue := reflect.New(reflect.PtrTo(field.Struct.Type))
@@ -511,7 +537,7 @@ func (scope *Scope) scan(rows *sql.Rows, columns []string, fields []*Field) {
 	}
 
 	scope.Err(rows.Scan(values...))
-
+	//这一步是为什么?
 	for index, field := range resetFields {
 		if v := reflect.ValueOf(values[index]).Elem().Elem(); v.IsValid() {
 			field.Field.Set(v)
@@ -692,12 +718,12 @@ func (scope *Scope) buildSelectQuery(clause map[string]interface{}) (str string)
 
 	buff := bytes.NewBuffer([]byte{})
 	i := 0
-	for pos := range str {
+	for pos, char := range str {
 		if str[pos] == '?' {
 			buff.WriteString(replacements[i])
 			i++
 		} else {
-			buff.WriteByte(str[pos])
+			buff.WriteRune(char)
 		}
 	}
 
@@ -854,7 +880,10 @@ func (scope *Scope) inlineCondition(values ...interface{}) *Scope {
 
 func (scope *Scope) callCallbacks(funcs []*func(s *Scope)) *Scope {
 	for _, f := range funcs {
+		//fmt.Printf("------------------------------- %v----runtime.FuncForPC(f).Name():%v \n", key+1, runtime.FuncForPC(reflect.ValueOf(*f).Pointer()).Name())
+
 		(*f)(scope)
+		//哪一步对skipLeft 做了处理
 		if scope.skipLeft {
 			break
 		}
@@ -1215,7 +1244,7 @@ func (scope *Scope) addForeignKey(field string, dest string, onDelete string, on
 }
 
 func (scope *Scope) removeForeignKey(field string, dest string) {
-	keyName := scope.Dialect().BuildKeyName(scope.TableName(), field, dest)
+	keyName := scope.Dialect().BuildKeyName(scope.TableName(), field, dest, "foreign")
 
 	if !scope.Dialect().HasForeignKey(scope.TableName(), keyName) {
 		return
